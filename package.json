@@ -6,8 +6,9 @@
     "dev": "next dev --webpack --port 9000",
     "build": "next build --webpack",
     "start": "next start --port 9000",
+    "postinstall": "prisma generate",
     "lint": "eslint . --ignore-pattern coverage --ignore-pattern .next",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "node -e \"try{require('node:fs').unlinkSync('tsconfig.tsbuildinfo')}catch(e){}\" && tsc --noEmit",
     "format": "prettier --write .",
     "test": "vitest",
     "test:run": "vitest run --coverage",
@@ -18,6 +19,7 @@
     "db:local:createdb": "powershell -ExecutionPolicy Bypass -File ./scripts/local-postgres.ps1 createdb",
     "db:local:status": "powershell -ExecutionPolicy Bypass -File ./scripts/local-postgres.ps1 status",
     "db:migrate": "prisma migrate dev",
+    "db:migrate:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts"
   },
   "prisma": {

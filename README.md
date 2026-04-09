@@ -197,6 +197,48 @@ Abrir [http://localhost:9000/login](http://localhost:9000/login).
 - `npm run db:local:createdb`
 - `npm run db:local:status`
 - `npm run db:local:stop`
+- `npm run db:migrate:deploy`
+
+## Publicarlo para acceder desde cualquier PC
+
+La forma mas simple de publicarlo es:
+
+1. Frontend y backend Next.js en Vercel
+2. Base PostgreSQL en Neon, Supabase o Railway
+3. Variables de entorno cargadas en el hosting
+
+### Variables para cloud
+
+```env
+DATABASE_URL="postgresql://usuario:password@host/db?sslmode=require"
+NEXTAUTH_SECRET="un-secret-largo-y-seguro"
+NEXTAUTH_URL="https://tu-dominio-publico"
+APP_ENV="production"
+UPLOAD_DIR="/tmp/portal-uala-bank-uploads"
+MAIL_ENABLED="false"
+```
+
+### Pasos recomendados
+
+1. Crear una base PostgreSQL cloud.
+2. Ejecutar `npm run db:migrate:deploy` contra esa base.
+3. Ejecutar `npm run db:seed` una sola vez para cargar datos demo.
+4. Importar el repo de GitHub en Vercel.
+5. Configurar las variables de entorno.
+6. Desplegar y probar `/login` y `/api/health`.
+
+### Limitacion actual de adjuntos en cloud
+
+En este MVP los adjuntos se guardan en filesystem local. En un deploy serverless eso no es persistente.
+
+Para una version publica estable, la siguiente mejora recomendada es migrar adjuntos a:
+
+- S3
+- Cloudflare R2
+- Google Cloud Storage
+- Vercel Blob
+
+La app ya tiene la capa de storage abstraida en `src/lib/storage.ts`, por lo que esa migracion es directa.
 
 ## BAT de arranque
 
