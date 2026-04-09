@@ -1,0 +1,272 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  PROCUREMENT
+  REQUESTER_AREA
+  AP
+}
+
+enum Currency {
+  ARS
+  USD
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  APPROVED
+  PARTIALLY_CONSUMED
+  FULLY_CONSUMED
+  CLOSED
+  CANCELED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  PENDING_AREA_APPROVAL
+  REJECTED_BY_AREA
+  DERIVED_TO_AP
+  RETURNED_BY_AP
+  ACCOUNTED
+  CANCELED
+}
+
+enum InvoiceSourceType {
+  AREA
+  AP_MONITOR
+}
+
+enum ApprovalDecision {
+  APPROVED
+  REJECTED
+  RETURNED
+}
+
+enum EntityType {
+  SUPPLIER
+  PURCHASE_ORDER
+  INVOICE
+}
+
+enum AuditAction {
+  CREATED
+  UPDATED
+  APPROVED
+  REJECTED
+  DERIVED
+  RETURNED
+  ACCOUNTED
+  CANCELED
+  STATUS_CHANGED
+  ATTACHMENT_ADDED
+  NOTIFICATION_QUEUED
+}
+
+enum InvoiceType {
+  A
+  B
+  C
+  CREDIT_NOTE
+  DEBIT_NOTE
+}
+
+enum NotificationChannel {
+  EMAIL
+}
+
+enum NotificationStatus {
+  DISABLED
+  PENDING
+  SENT
+  FAILED
+}
+
+model User {
+  id                      String         @id @default(cuid())
+  name                    String
+  email                   String         @unique
+  passwordHash            String
+  role                    Role
+  area                    String
+  active                  Boolean        @default(true)
+  createdAt               DateTime       @default(now())
+  updatedAt               DateTime       @updatedAt
+  createdPurchaseOrders   PurchaseOrder[] @relation("CreatedPurchaseOrders")
+  approvedPurchaseOrders  PurchaseOrder[] @relation("ApprovedPurchaseOrders")
+  uploadedInvoices        Invoice[]      @relation("UploadedInvoices")
+  approvedInvoicesByArea  Invoice[]      @relation("ApprovedInvoicesByArea")
+  accountedInvoices       Invoice[]      @relation("AccountedInvoices")
+  approvals               Approval[]
+  attachments             Attachment[]
+  auditLogs               AuditLog[]
+  notifications           NotificationOutbox[]
+}
+
+model Supplier {
+  id             String          @id @default(cuid())
+  businessName   String
+  taxId          String          @unique
+  email          String
+  active         Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  purchaseOrders PurchaseOrder[]
+  invoices       Invoice[]
+}
+
+model PurchaseOrder {
+  id              String              @id @default(cuid())
+  number          String              @unique
+  supplierId      String
+  area            String
+  accountCode     String
+  costCenter      String
+  requesterName   String?
+  createdById     String
+  currency        Currency
+  totalAmount     Decimal             @db.Decimal(14, 2)
+  consumedAmount  Decimal             @default(0) @db.Decimal(14, 2)
+  remainingAmount Decimal             @db.Decimal(14, 2)
+  status          PurchaseOrderStatus @default(DRAFT)
+  approvedById    String?
+  approvedAt      DateTime?
+  notes           String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  deletedAt       DateTime?
+  supplier        Supplier            @relation(fields: [supplierId], references: [id])
+  createdBy       User                @relation("CreatedPurchaseOrders", fields: [createdById], references: [id])
+  approvedBy      User?               @relation("ApprovedPurchaseOrders", fields: [approvedById], references: [id])
+  items           PurchaseOrderItem[]
+  invoices        Invoice[]
+  allocations     InvoiceAllocation[]
+}
+
+model PurchaseOrderItem {
+  id              String              @id @default(cuid())
+  purchaseOrderId String
+  description     String
+  quantity        Decimal             @db.Decimal(14, 2)
+  unitPrice       Decimal             @db.Decimal(14, 2)
+  totalPrice      Decimal             @db.Decimal(14, 2)
+  consumedAmount  Decimal             @default(0) @db.Decimal(14, 2)
+  remainingAmount Decimal             @db.Decimal(14, 2)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  purchaseOrder   PurchaseOrder       @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  allocations     InvoiceAllocation[]
+}
+
+model Invoice {
+  id                    String         @id @default(cuid())
+  supplierId            String
+  purchaseOrderId       String?
+  areaAssigned          String?
+  sourceType            InvoiceSourceType @default(AREA)
+  invoiceNumber         String?
+  invoiceType           InvoiceType?
+  invoiceDate           DateTime?
+  receivedDate          DateTime
+  currency              Currency?
+  subtotal              Decimal?       @db.Decimal(14, 2)
+  taxes                 Decimal?       @db.Decimal(14, 2)
+  totalAmount           Decimal?       @db.Decimal(14, 2)
+  accountCode           String?
+  costCenter            String?
+  status                InvoiceStatus  @default(DRAFT)
+  uploadedById          String
+  approvedByUserAreaId  String?
+  approvedByUserAreaAt  DateTime?
+  accountedById         String?
+  accountedAt           DateTime?
+  notes                 String?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  deletedAt             DateTime?
+  supplier              Supplier       @relation(fields: [supplierId], references: [id])
+  purchaseOrder         PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+  uploadedBy            User           @relation("UploadedInvoices", fields: [uploadedById], references: [id])
+  approvedByUserArea    User?          @relation("ApprovedInvoicesByArea", fields: [approvedByUserAreaId], references: [id])
+  accountedBy           User?          @relation("AccountedInvoices", fields: [accountedById], references: [id])
+  allocations           InvoiceAllocation[]
+
+  @@unique([supplierId, invoiceType, invoiceNumber])
+}
+
+model InvoiceAllocation {
+  id                  String            @id @default(cuid())
+  invoiceId           String
+  purchaseOrderId     String
+  purchaseOrderItemId String?
+  allocatedAmount     Decimal           @db.Decimal(14, 2)
+  createdAt           DateTime          @default(now())
+  invoice             Invoice           @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  purchaseOrder       PurchaseOrder     @relation(fields: [purchaseOrderId], references: [id])
+  purchaseOrderItem   PurchaseOrderItem? @relation(fields: [purchaseOrderItemId], references: [id])
+}
+
+model Approval {
+  id          String           @id @default(cuid())
+  entityType  EntityType
+  entityId    String
+  step        Int
+  decision    ApprovalDecision
+  decidedById String
+  comment     String
+  createdAt   DateTime         @default(now())
+  decidedBy   User             @relation(fields: [decidedById], references: [id])
+}
+
+model Attachment {
+  id           String     @id @default(cuid())
+  entityType   EntityType
+  entityId     String
+  fileName     String
+  filePath     String
+  mimeType     String
+  uploadedById String
+  uploadedAt   DateTime   @default(now())
+  uploadedBy   User       @relation(fields: [uploadedById], references: [id])
+}
+
+model AuditLog {
+  id            String      @id @default(cuid())
+  entityType    EntityType
+  entityId      String
+  action        AuditAction
+  fromStatus    String?
+  toStatus      String?
+  performedById String
+  comment       String?
+  metadata      Json?
+  createdAt     DateTime    @default(now())
+  performedBy   User        @relation(fields: [performedById], references: [id])
+}
+
+model NotificationOutbox {
+  id             String              @id @default(cuid())
+  eventKey       String
+  entityType     EntityType
+  entityId       String
+  channel        NotificationChannel @default(EMAIL)
+  recipientEmail String
+  recipientName  String?
+  subject        String
+  template       String
+  payload        Json?
+  status         NotificationStatus  @default(DISABLED)
+  errorMessage   String?
+  attemptedAt    DateTime?
+  sentAt         DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  createdById    String
+  createdBy      User                @relation(fields: [createdById], references: [id])
+}
